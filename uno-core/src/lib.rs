@@ -30,26 +30,24 @@ impl UnoDeck {
     pub fn new() -> Self {
         let mut cards: Vec<UnoCard> = Vec::with_capacity(FULL_DECK_SIZE);
 
-        (0..2).for_each(|_| {
-            // 2 sets of 0-9s and special cards for each color, but only 1 zero card per color
-            // so: all the card permutations
-            cards.append(&mut UnoCard::color_permutations());
-            // then all the card permutations except the zero cards
-            cards.append(
-                &mut UnoCard::color_permutations()
-                    .into_iter()
-                    .filter(|card| {
-                        !matches!(
-                            card,
-                            UnoCard::Card {
-                                value: UnoValue::Zero,
-                                ..
-                            }
-                        )
-                    })
-                    .collect(),
-            );
-        });
+        // 2 sets of 0-9s and special cards for each color, but only 1 zero card per color
+        // so: all the card permutations
+        cards.append(&mut UnoCard::color_permutations());
+        // then all the card permutations except the zero cards
+        cards.append(
+            &mut UnoCard::color_permutations()
+                .into_iter()
+                .filter(|card| {
+                    !matches!(
+                        card,
+                        UnoCard::Card {
+                            value: UnoValue::Zero,
+                            ..
+                        }
+                    )
+                })
+                .collect(),
+        );
 
         (0..8).for_each(|i| {
             // then 4 each of wild and wild draw 4 cards
