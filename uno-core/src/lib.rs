@@ -109,10 +109,19 @@ impl Default for UnoDeck {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum TurnDirection {
+    Clockwise,
+    CounterClockwise,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UnoGameState {
     pub main_deck: UnoDeck,
     pub discard_deck: UnoDeck,
     pub player_hands: Vec<UnoDeck>,
+    pub turn_direction: TurnDirection,
+    pub current_turn: usize,
 }
 
 impl UnoGameState {
@@ -132,7 +141,42 @@ impl UnoGameState {
             main_deck,
             discard_deck,
             player_hands,
+            turn_direction: TurnDirection::Clockwise,
+            current_turn: 0, // TODO dice roll for who goes first
         })
+    }
+
+    /// Draw `n` cards, handling recycling the main deck from the discard
+    /// deck if it runs out.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are not enough cards in the discard and main decks combined. TODO fix
+    /// this.
+    pub fn draw_n_cards(&mut self, n: usize) -> Vec<UnoCard> {
+        let mut cards = vec![];
+        for _ in 0..n {
+            if let Some(card) = self.main_deck.draw_card() {
+                cards.push(card);
+            } else {
+                // move all but top card to main deck and shuffle
+                let top_card = self
+                    .discard_deck
+                    .0
+                    .pop()
+                    .expect("No cards left -- everyone has huge hands?"); // TODO handle
+                                                                          // panic
+                self.main_deck.0.append(&mut self.discard_deck.0);
+                self.discard_deck = UnoDeck(vec![top_card]);
+                cards.push(
+                    self.main_deck
+                        .draw_card()
+                        .expect("There should be cards now."),
+                );
+            }
+        }
+
+        cards
     }
 
     /// Try to set the next game state by playing the specified card. Does not modify
@@ -165,6 +209,59 @@ impl UnoGameState {
 
         let card = self.player_hands[whos_turn].0.remove(card_idx);
         self.discard_deck.0.push(card);
+
+        match card {
+            UnoCard::Card { value, .. } => match value {
+                UnoValue::Skip => {
+                    // skip player
+                    self.current_turn = (self.current_turn + 2) % self.player_hands.len();
+                }
+                UnoValue::Reverse => {
+                    // reverse
+                    self.turn_direction = match self.turn_direction {
+                        TurnDirection::Clockwise => {
+                            self.current_turn = if self.current_turn == 0 {
+                                self.player_hands.len() - 1
+                            } else {
+                                self.current_turn - 1
+                            };
+                            TurnDirection::CounterClockwise
+                        }
+                        TurnDirection::CounterClockwise => {
+                            self.current_turn = (self.current_turn + 1) % self.player_hands.len();
+                            TurnDirection::Clockwise
+                        }
+                    }
+                }
+                UnoValue::Draw2 => {
+                    // advance turn
+                    self.current_turn = (self.current_turn + 1) % self.player_hands.len();
+                    // make them draw cards
+                    let mut drawn = self.draw_n_cards(2);
+                    self.player_hands[self.current_turn].0.append(&mut drawn);
+                    // draw 2 is also skip
+                    self.current_turn = (self.current_turn + 1) % self.player_hands.len();
+                }
+                _ => {}
+            },
+            UnoCard::Wild(wild) => match wild {
+                UnoWildCard::Played { draw_4, .. } => {
+                    if draw_4 {
+                        // advance turn
+                        self.current_turn = (self.current_turn + 1) % self.player_hands.len();
+                        // make them draw cards
+                        // TODO handle discard deck recycle
+                        let mut drawn = self.draw_n_cards(4);
+                        self.player_hands[self.current_turn].0.append(&mut drawn);
+                        // draw 4 is also skip
+                        self.current_turn = (self.current_turn + 1) % self.player_hands.len();
+                    }
+                }
+                UnoWildCard::Unplayed { .. } => {
+                    unreachable!("Already validated by playable_on function above")
+                }
+            },
+        };
 
         Ok(self)
     }
