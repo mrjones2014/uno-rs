@@ -62,7 +62,7 @@ impl UnoCard {
     /// # Errors
     ///
     /// Returns an error describing why the card cannot be played. [`UnoCardMatchError`]
-    pub fn playable_on(&self, other_card: UnoCard) -> Result<(), UnoCardMatchError> {
+    pub fn playable_on(&self, other_card: &UnoCard) -> Result<(), UnoCardMatchError> {
         match self {
             UnoCard::Card {
                 color: self_color,
@@ -72,37 +72,29 @@ impl UnoCard {
                     color: other_color,
                     value: other_value,
                 } => {
-                    if self_color == &other_color || self_value == &other_value {
+                    if self_color == other_color || self_value == other_value {
                         Ok(())
                     } else {
                         Err(UnoCardMatchError::NoMatch)
                     }
                 }
+                // if the other card is wild, must match their color
                 UnoCard::Wild(other_wild) => match other_wild {
-                    // can always play a wild card
-                    UnoWildCard::Played { .. } => Ok(()),
-                    UnoWildCard::Unplayed { .. } => Err(UnoCardMatchError::WildUnplayed),
-                },
-            },
-            UnoCard::Wild(wild) => match wild {
-                UnoWildCard::Played {
-                    color: self_color, ..
-                } => match other_card {
-                    UnoCard::Card {
+                    UnoWildCard::Played {
                         color: other_color, ..
                     } => {
-                        // wild cards don't have a value, just a color
-                        if self_color == &other_color {
+                        if self_color == other_color {
                             Ok(())
                         } else {
                             Err(UnoCardMatchError::NoMatch)
                         }
                     }
-                    UnoCard::Wild(wild) => match wild {
-                        UnoWildCard::Played { .. } => Ok(()), // can always play a wild card
-                        UnoWildCard::Unplayed { .. } => Err(UnoCardMatchError::WildUnplayed),
-                    },
+                    UnoWildCard::Unplayed { .. } => Err(UnoCardMatchError::WildUnplayed),
                 },
+            },
+            // can always play a wild card
+            UnoCard::Wild(self_wild) => match self_wild {
+                UnoWildCard::Played { .. } => Ok(()),
                 UnoWildCard::Unplayed { .. } => Err(UnoCardMatchError::WildUnplayed),
             },
         }
